@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 template <typename T>
 int str_to_unsigned(char const* str, T& res) {
@@ -60,7 +61,12 @@ static int execute(const uint16_t rank, const uint16_t world_size) {
         return status;
     }
 
-    // TODO Cynthia: call `c.execute()` here
+    // LATER: uncomment this!!!
+    
+    // status = p.execute();
+    // if (status != 0) {
+    //     return status;
+    // }
 
     return 0;
 }

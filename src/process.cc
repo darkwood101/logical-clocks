@@ -1,10 +1,13 @@
 #include "process.h"
+#include "message.h"
 
 #include <iostream>
 #include <sched.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <poll.h>
+
 
 process::process(const uint16_t rank, const uint16_t world_size) :
     rank_(rank), world_size_(world_size), rng_(std::random_device {}()),
@@ -121,37 +124,110 @@ int process::open_connections() {
     return 0;
 }
 
+// Function to handle poll-receive message logic
+// Write into log who it received the message from
+bool process::recv_msg(int process_a_fd) {
+    pollfd fd;
+    memset(&fd, 0, sizeof(pollfd));
+    fd.fd = process_a_fd; // waiting for this file desc
+    fd.events |= POLLIN; // waiting for this event
+    while (poll(&fd, 1, 0) != 0) {
+        // recv
+        message msg();
+        size_t total_recvd = 0;
+        ssize_t recvd = 0;
+
+        // receive message into msg buffer until # of bytes received is correct
+        while (total_recvd != sizeof(msg)) {
+    
+            // *** not sure if i did the process_a_fd stuff correctly here
+            recvd = recv(process_a_fd, ((char*) &msg) + total_recvd, sizeof(msg) - total_recvd, 0);
+            if (recvd <= 0) {
+                // Throw ERROR!!!
+            }
+            total_recvd += recvd;
+        }
+        // *** how to update message queue here 
+        // print message received here (?)
+    }
+    
+}
+
+// Function to handle send message
+bool process::send_msg(uint16_t rank, uint16_t timestamp, int process_a_fd) {  
+    // prepare msg…
+    message msg(rank, timestamp);
+    
+    size_t total_sent = 0;
+    ssize_t sent = 0;
+    while (total_sent != sizeof(msg)) {
+        sent = send(process_a_fd, ((char*) &msg) + total_sent, sizeof(msg) - total_sent, 0);
+        if (sent <= 0) {
+            // ERROR!
+            // exit();
+        }
+        total_sent += sent;
+    }
+    
+}
+
+
 int process::execute() {
-    // TODO Cynthia: Implement execute here
-    //
-    // The following information can be accessed through the `process` class:
-    //
-    // `clock_speed_` - the number between 1 and 6
-    //
-    // `outfile_` - output log file for this process, can just do `outfile_ <<
-    // "hello"`, for example
-    //
-    // `other_procs_fds_` - a vector of socket descriptors for other processes,
-    // we care about `other_procs_fds_[0]` and `other_procs_fds_[1]`. With 3
-    // processes, the size of this vector will always be 3. To relate this to
-    // what we wrote in the docs, `process_a_fd` would be `other_procs_fds_[0]`,
-    // and `process_b_fd` would be `other_procs_fds_[1]`
-    //
-    // `rng_` - random number generator. See `process::initialize_clock_speed()`
-    // on how you can initialize a uniform distribution for generating random
-    // numbers
-    //
-    // `rank_` - the ID of this process, in range 0-2, inclusive. This might be
-    // included in the message? Not sure.
-    //
-    //
-    // Besides writing the loop from the docs, you will also need to do at least
-    // 2 other things that I can think of right now:
-    //    1. Figure out what goes in a message, and define a message struct,
-    //       maybe in a header file like `include/message.h`
-    //    2. Add logical clock to the `process` class. This will probably be an
-    //       unsigned int, likely `uint64_t`, that you can
-    //       put in `process.h` in the `private` section of the class.
+    int process_a_fd = other_procs_fds_[0];
+    int process_b_fd = other_procs_fds_[1];
+    int sleep_length = clock_speed_; // (clock speed)
+    // define message queue
+    //std::queue<message> queue;
+
+    while (true) {
+		// if (socket_from_process_1.pending()) {
+		// 	recv(socket_from_process_1);
+		// 	update_logical_clock();
+		// } 
+
+        // poll + receive from process a
+        if (recv_msg(process_a_fd)) {
+            // print receive?
+            // update_logical_clock(); - IMPLEMENT
+        } 
+        // poll + receive from process b
+        else if (recv_msg(process_b_fd)) {
+            // print something here?
+            // update_logical_clock(); - IMPLEMENT
+        }
+        else {
+			// generate random number from 1 to 10
+            std::uniform_int_distribution<uint32_t> uid(1, 10);
+            int num = uid(rng_);
+
+			// external events
+			if (num == 1) {
+                // send: 
+                uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
+				send_msg(rank_, timestamp, process_a_fd);
+                // update_logical_clock(); - IMPLEMENT
+			} 
+            else if (num == 2) {
+				uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
+				send_msg(rank_, timestamp, process_b_fd);
+                // update_logical_clock(); - IMPLEMENT
+			} 
+            else if (num == 3) {
+				uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
+				send_msg(rank_, timestamp, process_a_fd);
+                send_msg(rank_, timestamp, process_b_fd);
+                
+                //update_logical_clock();
+			} 
+            else {
+				// internal event (add one to value of clock, probably)
+
+				// update_logical_clock();
+			}
+		}
+		sleep();
+	}
+
 
     return 0;
 }

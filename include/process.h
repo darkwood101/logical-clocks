@@ -37,6 +37,9 @@ public:
 
     int execute();
 
+    bool recv_msg(int process_a_fd);
+    bool send_msg(uint16_t rank, uint16_t timestamp, int process_a_fd);
+
 private:
     // Rank of this process
     const uint16_t rank_;
