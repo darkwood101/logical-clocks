@@ -4,7 +4,9 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <signal.h>
 #include <sys/signal.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -140,11 +142,13 @@ int main(int argc, char** argv) {
             murder_all_children(children);
             return EXIT_FAILURE;
         } else if (!WIFEXITED(wstatus)) {
-            std::cerr << "Child " << p << " terminated abnormally, status " << wstatus << "\n";
+            std::cerr << "Child " << p << " terminated abnormally, status "
+                      << wstatus << "\n";
             murder_all_children(children);
             return EXIT_FAILURE;
         } else if (WEXITSTATUS(wstatus) != EXIT_SUCCESS) {
-            std::cerr << "Child " << p << " exited with status " << WEXITSTATUS(wstatus) << "\n";
+            std::cerr << "Child " << p << " exited with status "
+                      << WEXITSTATUS(wstatus) << "\n";
             murder_all_children(children);
             return EXIT_FAILURE;
         }
