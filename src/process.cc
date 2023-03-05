@@ -126,51 +126,50 @@ int process::open_connections() {
 
 // Function to handle poll-receive message logic
 // Write into log who it received the message from
-bool process::recv_msg(int process_a_fd) {
+bool process::recv_msg(int send_process_fd) {
+
     pollfd fd;
     memset(&fd, 0, sizeof(pollfd));
-    fd.fd = process_a_fd; // waiting for this file desc
+    fd.fd = send_process_fd; // waiting for this file desc
     fd.events |= POLLIN; // waiting for this event
+
     while (poll(&fd, 1, 0) != 0) {
-        // recv
         message msg();
         size_t total_recvd = 0;
         ssize_t recvd = 0;
 
-        // receive message into msg buffer until # of bytes received is correct
+        // Receive message into msg buffer until # of bytes received is correct
         while (total_recvd != sizeof(msg)) {
-    
             // *** not sure if i did the process_a_fd stuff correctly here
-            recvd = recv(process_a_fd, ((char*) &msg) + total_recvd, sizeof(msg) - total_recvd, 0);
+            recvd = recv(send_process_fd, ((char*) &msg) + total_recvd, sizeof(msg) - total_recvd, 0);
             if (recvd <= 0) {
                 // Throw ERROR!!!
             }
             total_recvd += recvd;
         }
-        // *** how to update message queue here 
+        // *** need to update message queue here?
         // print message received here (?)
     }
     
 }
 
 // Function to handle send message
-bool process::send_msg(uint16_t rank, uint16_t timestamp, int process_a_fd) {  
+bool process::send_msg(uint16_t rank, uint16_t timestamp, int receive_proc_fd) {  
     // prepare msg…
     message msg(rank, timestamp);
     
     size_t total_sent = 0;
     ssize_t sent = 0;
+
     while (total_sent != sizeof(msg)) {
-        sent = send(process_a_fd, ((char*) &msg) + total_sent, sizeof(msg) - total_sent, 0);
+        sent = send(receive_proc_fd, ((char*) &msg) + total_sent, sizeof(msg) - total_sent, 0);
         if (sent <= 0) {
             // ERROR!
             // exit();
         }
         total_sent += sent;
     }
-    
 }
-
 
 int process::execute() {
     int process_a_fd = other_procs_fds_[0];
@@ -180,14 +179,10 @@ int process::execute() {
     //std::queue<message> queue;
 
     while (true) {
-		// if (socket_from_process_1.pending()) {
-		// 	recv(socket_from_process_1);
-		// 	update_logical_clock();
-		// } 
-
         // poll + receive from process a
         if (recv_msg(process_a_fd)) {
             // print receive?
+            // update message queue?
             // update_logical_clock(); - IMPLEMENT
         } 
         // poll + receive from process b
@@ -216,7 +211,7 @@ int process::execute() {
 				uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
 				send_msg(rank_, timestamp, process_a_fd);
                 send_msg(rank_, timestamp, process_b_fd);
-                
+
                 //update_logical_clock();
 			} 
             else {
@@ -225,7 +220,7 @@ int process::execute() {
 				// update_logical_clock();
 			}
 		}
-		sleep();
+		sleep(0.1);
 	}
 
 
