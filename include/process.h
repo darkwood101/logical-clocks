@@ -44,6 +44,9 @@ private:
     // Rank of this process
     const uint16_t rank_;
 
+    // Logical clock value
+    uint64_t logical_clock_;
+
     // Total number of processes
     const uint16_t world_size_;
 

@@ -174,7 +174,9 @@ bool process::send_msg(uint16_t rank, uint16_t timestamp, int receive_proc_fd) {
 int process::execute() {
     int process_a_fd = other_procs_fds_[0];
     int process_b_fd = other_procs_fds_[1];
-    int sleep_length = clock_speed_; // (clock speed)
+    
+    int sleep_length = 1 / ((double) clock_speed_);
+    
     // define message queue
     //std::queue<message> queue;
 
