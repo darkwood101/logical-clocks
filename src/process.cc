@@ -177,6 +177,7 @@ void process::send_msg(int receive_proc_fd) const {
     }
 }
 
+// Main loop for executing receiving and sending messages
 int process::execute() {
     int process_a_fd = other_procs_fds_[0];
     int process_b_fd = other_procs_fds_[1];
@@ -218,12 +219,14 @@ int process::execute() {
                 send_msg(process_b_fd);
                 outfile_ << ": sending to other process\n";
                 ++logical_clock_;
-            } else if (num == 3) {
+            } else if (num >= 3 && num <= 9) {
                 send_msg(process_a_fd);
                 send_msg(process_b_fd);
                 outfile_ << ": sending to both processes\n";
                 ++logical_clock_;
-            } else {
+            } 
+            // internal event
+            else {
                 outfile_ << ": internal event\n";
                 ++logical_clock_;
             }
