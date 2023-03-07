@@ -1,17 +1,21 @@
 #include "process.h"
+
 #include "message.h"
 
+#include <chrono>
 #include <iostream>
+#include <poll.h>
 #include <sched.h>
+#include <stdexcept>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <thread>
 #include <unistd.h>
-#include <poll.h>
-
 
 process::process(const uint16_t rank, const uint16_t world_size) :
-    rank_(rank), world_size_(world_size), rng_(std::random_device {}()),
-    clock_speed_(0), socket_path_prefix_("socket_path_"), listen_fd_(-1),
+    rank_(rank), logical_clock_(0), world_size_(world_size),
+    rng_(std::random_device {}()), clock_speed_(0),
+    socket_path_prefix_("socket_path_"), listen_fd_(-1),
     other_procs_fds_(world_size_ - 1, -1) {
     if (rank_ >= world_size_) {
         throw std::logic_error("Rank must be smaller than world size");
@@ -126,46 +130,48 @@ int process::open_connections() {
 
 // Function to handle poll-receive message logic
 // Write into log who it received the message from
-bool process::recv_msg(int send_process_fd) {
-
+void process::recv_msg(int send_proc_fd) {
     pollfd fd;
     memset(&fd, 0, sizeof(pollfd));
-    fd.fd = send_process_fd; // waiting for this file desc
-    fd.events |= POLLIN; // waiting for this event
+    fd.fd = send_proc_fd;  // waiting for this file desc
+    fd.events |= POLLIN;   // waiting for this event
 
+    message msg;
     while (poll(&fd, 1, 0) != 0) {
-        message msg();
         size_t total_recvd = 0;
         ssize_t recvd = 0;
 
         // Receive message into msg buffer until # of bytes received is correct
         while (total_recvd != sizeof(msg)) {
             // *** not sure if i did the process_a_fd stuff correctly here
-            recvd = recv(send_process_fd, ((char*) &msg) + total_recvd, sizeof(msg) - total_recvd, 0);
+            recvd = recv(send_proc_fd,
+                         ((char*) &msg) + total_recvd,
+                         sizeof(msg) - total_recvd,
+                         0);
             if (recvd <= 0) {
-                // Throw ERROR!!!
+                throw std::runtime_error("recv error");
             }
             total_recvd += recvd;
         }
-        // *** need to update message queue here?
-        // print message received here (?)
+        msg_q_.push(msg);
     }
-    
 }
 
 // Function to handle send message
-bool process::send_msg(uint16_t rank, uint16_t timestamp, int receive_proc_fd) {  
+void process::send_msg(int receive_proc_fd) const {
     // prepare msg…
-    message msg(rank, timestamp);
-    
+    message msg(rank_, logical_clock_);
+
     size_t total_sent = 0;
     ssize_t sent = 0;
 
     while (total_sent != sizeof(msg)) {
-        sent = send(receive_proc_fd, ((char*) &msg) + total_sent, sizeof(msg) - total_sent, 0);
+        sent = send(receive_proc_fd,
+                    ((char*) &msg) + total_sent,
+                    sizeof(msg) - total_sent,
+                    0);
         if (sent <= 0) {
-            // ERROR!
-            // exit();
+            throw std::runtime_error("send error");
         }
         total_sent += sent;
     }
@@ -174,57 +180,58 @@ bool process::send_msg(uint16_t rank, uint16_t timestamp, int receive_proc_fd) {
 int process::execute() {
     int process_a_fd = other_procs_fds_[0];
     int process_b_fd = other_procs_fds_[1];
-    
-    int sleep_length = 1 / ((double) clock_speed_);
-    
-    // define message queue
-    //std::queue<message> queue;
+
+    std::cout << "process " << rank_ << " speed: " << clock_speed_ << "\n";
+
+    int sleep_length = 1000 / clock_speed_;
 
     while (true) {
-        // poll + receive from process a
-        if (recv_msg(process_a_fd)) {
-            // print receive?
-            // update message queue?
-            // update_logical_clock(); - IMPLEMENT
-        } 
-        // poll + receive from process b
-        else if (recv_msg(process_b_fd)) {
-            // print something here?
-            // update_logical_clock(); - IMPLEMENT
-        }
-        else {
-			// generate random number from 1 to 10
+        auto global_time =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
+        outfile_ << global_time << "," << logical_clock_ << "," << rank_;
+
+        recv_msg(process_a_fd);
+        recv_msg(process_b_fd);
+
+        if (!msg_q_.empty()) {
+            const message& msg = msg_q_.front();
+            outfile_ << ": received logical clock " << msg.timestamp_
+                     << " from process " << msg.rank_
+                     << ", message queue length " << msg_q_.size() << "\n";
+            logical_clock_ = std::max(logical_clock_, msg.timestamp_ + 1);
+            msg_q_.pop();
+            ++logical_clock_;
+        } else {
+            // generate random number from 1 to 10
             std::uniform_int_distribution<uint32_t> uid(1, 10);
             int num = uid(rng_);
 
-			// external events
-			if (num == 1) {
-                // send: 
-                uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
-				send_msg(rank_, timestamp, process_a_fd);
-                // update_logical_clock(); - IMPLEMENT
-			} 
-            else if (num == 2) {
-				uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
-				send_msg(rank_, timestamp, process_b_fd);
-                // update_logical_clock(); - IMPLEMENT
-			} 
-            else if (num == 3) {
-				uint16_t timestamp = 0; // COMPUTE TIMESTAMP HERE
-				send_msg(rank_, timestamp, process_a_fd);
-                send_msg(rank_, timestamp, process_b_fd);
+            // external events
+            if (num == 1) {
+                // send:
+                send_msg(process_a_fd);
+                outfile_ << ": sending to one process\n";
+                ++logical_clock_;
+            } else if (num == 2) {
+                send_msg(process_b_fd);
+                outfile_ << ": sending to other process\n";
+                ++logical_clock_;
+            } else if (num == 3) {
+                send_msg(process_a_fd);
+                send_msg(process_b_fd);
+                outfile_ << ": sending to both processes\n";
+                ++logical_clock_;
+            } else {
+                outfile_ << ": internal event\n";
+                ++logical_clock_;
+            }
+        }
+        outfile_ << std::flush;
 
-                //update_logical_clock();
-			} 
-            else {
-				// internal event (add one to value of clock, probably)
-
-				// update_logical_clock();
-			}
-		}
-		sleep(0.1);
-	}
-
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_length));
+    }
 
     return 0;
 }

@@ -1,8 +1,11 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
+#include "message.h"
+
 #include <cstdlib>
 #include <fstream>
+#include <queue>
 #include <random>
 #include <string>
 #include <vector>
@@ -37,8 +40,8 @@ public:
 
     int execute();
 
-    bool recv_msg(int process_a_fd);
-    bool send_msg(uint16_t rank, uint16_t timestamp, int process_a_fd);
+    void recv_msg(int send_proc_fd);
+    void send_msg(int receive_proc_fd) const;
 
 private:
     // Rank of this process
@@ -70,6 +73,8 @@ private:
     // `other_procs_fds_.size() == world_size_ - 1`
     // Index in this vector implies nothing about the process rank
     std::vector<int> other_procs_fds_;
+
+    std::queue<message> msg_q_;
 };
 
 #endif

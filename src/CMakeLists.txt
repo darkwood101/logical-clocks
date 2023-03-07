@@ -1,6 +1,7 @@
 add_library(
     process
     process.cc
+    message.cc
 )
 target_compile_options(
     process
